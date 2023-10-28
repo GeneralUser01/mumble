@@ -7580,7 +7580,7 @@ Bu dosyaları son sürümlerine güncellemek için aşağıdaki düğmeyi tıkla
     </message>
     <message>
         <source>Non-plugin found in plugin directory: &quot;%1&quot; (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Eklenti dizininde eklenti olmayan bir şey bulundu: &quot;%1&quot; (%2)</translation>
     </message>
 </context>
 <context>
