@@ -7580,7 +7580,7 @@ Aby uaktualnić pliki do najnowszych wersji, kliknij przycisk poniżej.</transla
     </message>
     <message>
         <source>Non-plugin found in plugin directory: &quot;%1&quot; (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Znaleziono plik niebędący wtyczką w katalogu wtyczek: &quot;%1&quot; (%2)</translation>
     </message>
 </context>
 <context>
