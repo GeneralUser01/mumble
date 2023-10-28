@@ -7578,7 +7578,7 @@ To upgrade these files to their latest versions, click the button below.</source
     </message>
     <message>
         <source>Non-plugin found in plugin directory: &quot;%1&quot; (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation>在插件目录发现非插件：“%1”（%2）</translation>
     </message>
 </context>
 <context>
