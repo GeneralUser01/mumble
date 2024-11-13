@@ -415,6 +415,9 @@ QVector< LogMessage > Log::qvDeferredLogs;
 Log::Log(QObject *p) : QObject(p) {
 	qRegisterMetaType< Log::MsgType >();
 
+	QAbstractTextDocumentLayout *docLayout = Global::get().mw->qteLog->document()->documentLayout();
+	docLayout->registerHandler(Animation, new AnimationTextObject());
+
 #ifndef USE_NO_TTS
 	tts = new TextToSpeech(this);
 	tts->setVolume(Global::get().s.iTTSVolume);
@@ -634,6 +637,75 @@ QString Log::imageToImg(QImage img, int maxSize) {
 	return QString();
 }
 
+bool Log::htmlWithAnimation(const QString &html, QTextCursor *tc) {
+	int imgStartIndex = html.indexOf("<img");
+	int base64StartIndex = html.indexOf(',', imgStartIndex) + 1;
+	int htmlLastIndex = html.length() - 1;
+	// Get the relevant part of the header through decoding the first 4
+	// characters where each character is 6 bits in base64 encoding
+	// and 3 bytes consists of 24 bits:
+	QString imageFirstThreeBytes = base64StartIndex > 0 && htmlLastIndex > base64StartIndex + 2 ?
+		qvariant_cast< QString >(QByteArray::fromBase64(qvariant_cast< QByteArray >(html.sliced(base64StartIndex, 4)))) :
+		"";
+	if (imageFirstThreeBytes != "GIF") {
+		return false;
+	}
+	int imgEndIndex = html.indexOf('>', imgStartIndex);
+	int base64EndIndex = html.indexOf('\"', imgStartIndex) - 1;
+	int base64Size = base64EndIndex - base64StartIndex + 1;
+	QString animationBase64 = html.sliced(base64StartIndex, base64Size);
+	QByteArray animationBa = QByteArray::fromBase64(qvariant_cast< QByteArray >(animationBase64));
+
+	QMovie *animation = new QMovie();
+	QBuffer *buffer = new QBuffer(animation);
+	buffer->setData(animationBa);
+	buffer->open(QIODevice::ReadOnly);
+	animation->setDevice(buffer);
+	if (!animation->isValid()) {
+		return false;
+	}
+	// Indicate if the setup-work for how the animation updates has been done,
+	// which uses the position from a parameter of `drawObject`.
+	// The initial value is `true` with a property name accordingly since
+	// `false` is the default value of unset properties converted to a bool:
+	animation->setProperty("isNoUpdateSetup", QVariant(true));
+	animation->setProperty("LoopMode", QVariant::fromValue(AnimationTextObject::Unchanged));
+	// Load and start the animation but stop or pause it after this when it should not play by default:
+	animation->start();
+
+	int frameCount = animation->frameCount();
+	int frameCountTest = 0;
+	int totalMs = 0;
+	QList< QVariant > frameDelays;
+	// Test how many frames there are by index in case the animation format does not support `frameCount`.
+	// Also determine the total play time for the video controls by gathering the time from each frame.
+	// The current time is determined by a list of the time between frames since each delay until the next frame may vary:
+	while (animation->jumpToFrame(++frameCountTest)) {
+		int delay = animation->nextFrameDelay();
+		frameDelays.append(QVariant(delay));
+		totalMs += delay;
+	}
+	if (frameCount == 0) {
+		frameCount = frameCountTest;
+	}
+	animation->setProperty("lastFrameIndex", QVariant(frameCount - 1));
+	animation->setProperty("totalMs", QVariant(totalMs));
+	animation->setProperty("frameDelays", frameDelays);
+	animation->jumpToFrame(0);
+	animation->stop();
+
+	QTextCharFormat fmt = Global::get().mw->qteLog->currentCharFormat();
+	fmt.setObjectType(Animation);
+	fmt.setProperty(1, QVariant::fromValue(animation));
+
+	QString htmlBeforeImgTag = imgStartIndex > 0 ? html.sliced(0, imgStartIndex - 1) : "";
+	QString htmlAfterImgTag = imgEndIndex < htmlLastIndex ? html.sliced(imgEndIndex + 1) : "";
+	tc->insertHtml(htmlBeforeImgTag);
+	tc->insertText(QString(QChar::ObjectReplacementCharacter), fmt);
+	tc->insertHtml(htmlAfterImgTag);
+	return true;
+}
+
 QString Log::validHtml(const QString &html, QTextCursor *tc) {
 	LogDocument qtd;
 
@@ -648,7 +720,11 @@ QString Log::validHtml(const QString &html, QTextCursor *tc) {
 	// allowing our validation checks for things such as
 	// data URL images to run.
 	(void) qtd.documentLayout();
-	qtd.setHtml(html);
+	// Parse and insert an animated image file along with the rest of the HTML
+	// if a tag, a header and valid data for it is detected, otherwise log the HTML as usual:
+	if (!tc || !htmlWithAnimation(html, tc)) {
+		qtd.setHtml(html);
+	}
 
 	QStringList qslAllowed = allowedSchemes();
 	for (QTextBlock qtb = qtd.begin(); qtb != qtd.end(); qtb = qtb.next()) {

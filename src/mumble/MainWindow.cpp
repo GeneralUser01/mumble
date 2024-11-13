@@ -69,6 +69,7 @@
 #include <QAccessible>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrlQuery>
+#include <QtCore/QSaveFile>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QImageReader>
@@ -1064,11 +1065,15 @@ void MainWindow::on_qteLog_customContextMenuRequested(const QPoint &mpos) {
 		cursor.movePosition(QTextCursor::NextCharacter);
 		fmt = cursor.charFormat();
 	}
-	if (cursor.charFormat().isImageFormat()) {
+	bool isAnimation = fmt.objectType() == Log::Animation;
+	if (fmt.isImageFormat() || isAnimation) {
 		menu->addSeparator();
 		menu->addAction(tr("Save Image As..."), this, SLOT(saveImageAs(void)));
 
 		qtcSaveImageCursor = cursor;
+	}
+	if (isAnimation) {
+		menu->addAction(tr("Toggle Video Controls"), this, SLOT(toggleVideoControls(void)));
 	}
 
 	menu->addSeparator();
@@ -1077,25 +1082,48 @@ void MainWindow::on_qteLog_customContextMenuRequested(const QPoint &mpos) {
 	delete menu;
 }
 
+void MainWindow::toggleVideoControls() {
+	AnimationTextObject::areVideoControlsOn = !AnimationTextObject::areVideoControlsOn;
+}
+
 void MainWindow::saveImageAs() {
+	QTextCharFormat fmt = qtcSaveImageCursor.charFormat();
+	bool isAnimation = fmt.objectType() == Log::Animation;
+	QString fileExtension = isAnimation ? "gif" : "jpg";
 	QDateTime now = QDateTime::currentDateTime();
 	QString defaultFname =
-		QString::fromLatin1("Mumble-%1.jpg").arg(now.toString(QString::fromLatin1("yyyy-MM-dd-HHmmss")));
+		QString::fromLatin1("Mumble-%1.%2").arg(now.toString(QString::fromLatin1("yyyy-MM-dd-HHmmss"))).arg(fileExtension);
 
 	QString fname = QFileDialog::getSaveFileName(this, tr("Save Image File"), getImagePath(defaultFname),
-												 tr("Images (*.png *.jpg *.jpeg)"));
+												 tr("Images (*.png *.jpg *.jpeg *.gif)"));
 	if (fname.isNull()) {
 		return;
 	}
 
-	QString resName = qtcSaveImageCursor.charFormat().toImageFormat().name();
-	QVariant res    = qteLog->document()->resource(QTextDocument::ImageResource, resName);
-	QImage img      = res.value< QImage >();
-	bool ok         = img.save(fname);
-	if (!ok) {
-		// In case fname did not contain a file extension, try saving with an
-		// explicit format.
-		ok = img.save(fname, "PNG");
+	bool ok = false;
+	if (isAnimation) {
+		QMovie *animation = qvariant_cast< QMovie* >(fmt.property(1));
+		QIODevice *device = animation->device();
+		int previousPos = device->pos();
+		if (device->reset()) {
+			QByteArray fileData = device->readAll();
+			QSaveFile saveFile(fname);
+			if (saveFile.open(QIODevice::WriteOnly)) {
+				saveFile.write(fileData);
+				ok = saveFile.commit();
+			}
+		}
+		device->seek(previousPos);
+	} else {
+		QString resName = fmt.toImageFormat().name();
+		QVariant res    = qteLog->document()->resource(QTextDocument::ImageResource, resName);
+		QImage img      = res.value< QImage >();
+		ok              = img.save(fname);
+		if (!ok) {
+			// In case fname did not contain a file extension, try saving with an
+			// explicit format.
+			ok = img.save(fname, "PNG");
+		}
 	}
 
 	updateImagePath(fname);
@@ -3914,7 +3942,7 @@ QPair< QByteArray, QImage > MainWindow::openImageFile() {
 	QPair< QByteArray, QImage > retval;
 
 	QString fname =
-		QFileDialog::getOpenFileName(this, tr("Choose image file"), getImagePath(), tr("Images (*.png *.jpg *.jpeg)"));
+		QFileDialog::getOpenFileName(this, tr("Choose image file"), getImagePath(), tr("Images (*.png *.jpg *.jpeg *.gif)"));
 
 	if (fname.isNull())
 		return retval;

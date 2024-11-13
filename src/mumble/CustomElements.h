@@ -10,11 +10,18 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QTextBrowser>
 #include <QtWidgets/QTextEdit>
+#include <QTextObjectInterface>
+#include <QtGui/QMovie>
+
+Q_DECLARE_METATYPE(QMovie*)
 
 class LogTextBrowser : public QTextBrowser {
 private:
 	Q_OBJECT
 	Q_DISABLE_COPY(LogTextBrowser)
+
+protected:
+	void mousePressEvent(QMouseEvent *) Q_DECL_OVERRIDE;
 
 public:
 	LogTextBrowser(QWidget *p = nullptr);
@@ -51,7 +58,7 @@ protected:
 	void resizeEvent(QResizeEvent *e) Q_DECL_OVERRIDE;
 	void insertFromMimeData(const QMimeData *source) Q_DECL_OVERRIDE;
 	bool sendImagesFromMimeData(const QMimeData *source);
-	bool emitPastedImage(QImage image);
+	bool emitPastedImage(QImage image, QString filePath = "");
 
 public:
 	void setDefaultText(const QString &, bool = false);
@@ -73,6 +80,48 @@ public slots:
 
 public:
 	ChatbarTextEdit(QWidget *p = nullptr);
+};
+
+class AnimationTextObject : public QObject, public QTextObjectInterface {
+    Q_OBJECT
+    Q_INTERFACES(QTextObjectInterface)
+
+protected:
+	QSizeF intrinsicSize(QTextDocument *doc, int posInDoc, const QTextFormat &fmt) Q_DECL_OVERRIDE;
+	void drawObject(QPainter *painter, const QRectF &rect, QTextDocument *doc, int posInDoc, const QTextFormat &fmt) Q_DECL_OVERRIDE;
+
+public:
+	AnimationTextObject();
+	static void mousePress(QAbstractTextDocumentLayout *docLayout, QPoint mouseDocPos, Qt::MouseButton button);
+	static bool areVideoControlsOn;
+
+	enum VideoController {
+		VideoBar,
+		View,
+		PlayPause,
+		CacheSwitch,
+		LoopSwitch,
+		PreviousFrame,
+		NextFrame,
+		ResetSpeed,
+		DecreaseSpeed,
+		IncreaseSpeed,
+		None
+	};
+	enum LoopMode { Unchanged, Loop, NoLoop };
+	static QString loopModeToString(LoopMode mode);
+
+	static void setFrame(QMovie *animation, int frameIndex);
+	static void updatePropertyPositionIfChanged(QObject *propertyHolder, QRectF rect);
+	static void drawCenteredPlayIcon(QPainter *painter, QRectF rect);
+
+	static bool isInBoundsOnAxis(QPoint pos, bool yInsteadOfX, int start, int length);
+	static bool isInBounds(QPoint pos, QRectF bounds);
+	static void setVideoControlPositioning(QObject *propertyHolder, QRectF rect, int videoBarHeight = 4, int underVideoBarHeight = 20,
+	                                       int cacheX = -170, int loopModeX = -130, int frameTraversalX = -90, int speedX = -30);
+	static VideoController mousePressVideoControls(QObject *propertyHolder, QPoint mouseDocPos);
+	static void drawVideoControls(QPainter *painter, QObject *propertyHolder, QPixmap frame,
+	                              bool isPaused, bool isCached, int frameIndex, int speed);
 };
 
 class DockTitleBar : public QLabel {

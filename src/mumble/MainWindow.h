@@ -372,6 +372,8 @@ public slots:
 	void onResetAudio();
 	void showRaiseWindow();
 	void on_qaFilterToggle_triggered();
+	/// Alternates between showing and hiding video controls for animated images.
+	void toggleVideoControls();
 	/// Opens a save dialog for the image referenced by qtcSaveImageCursor.
 	void saveImageAs();
 	/// Returns the path to the user's image directory, optionally with a
